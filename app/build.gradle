@@ -1,8 +1,6 @@
-plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-    id 'com.google.devtools.ksp'
-}
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'com.google.devtools.ksp'
 
 android {
     namespace 'com.jardin.semis'
@@ -44,7 +42,7 @@ android {
 }
 
 configurations.all {
-    // Exclure l'ancienne bibliothèque android.support qui entre en conflit avec AndroidX
+    // Exclure l'ancienne bibliothèque android.support incompatible avec AndroidX
     exclude group: 'com.android.support'
 }
 
@@ -82,6 +80,8 @@ dependencies {
 
     // WorkManager (notifications)
     implementation 'androidx.work:work-runtime-ktx:2.9.0'
+
+    // Location (météo géolocalisée)
 
     // Tests
     testImplementation 'junit:junit:4.13.2'
