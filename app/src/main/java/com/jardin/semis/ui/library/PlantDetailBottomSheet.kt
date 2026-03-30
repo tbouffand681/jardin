@@ -7,8 +7,10 @@ import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.jardin.semis.SemisApplication
 import com.jardin.semis.SemisViewModel
 import com.jardin.semis.databinding.BottomSheetPlantDetailBinding
+import com.jardin.semis.ui.calendar.AddSowingBottomSheet
 import kotlinx.coroutines.launch
 
 class PlantDetailBottomSheet : BottomSheetDialogFragment() {
@@ -33,13 +35,7 @@ class PlantDetailBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         lifecycleScope.launch {
-            val plant = viewModel.allPlants.let {
-                // On récupère la plante depuis le flow
-                var found = viewModel
-                null
-            }
-            // Charger la plante directement via le repository
-            val p = (requireActivity().application as com.jardin.semis.SemisApplication)
+            val p = (requireActivity().application as SemisApplication)
                 .repository.getPlantById(plantId) ?: return@launch
 
             with(binding) {
@@ -47,14 +43,12 @@ class PlantDetailBottomSheet : BottomSheetDialogFragment() {
                 tvName.text = p.name
                 tvLatinName.text = p.latinName
                 tvCategory.text = p.category
-
                 tvOccupationDays.text = "${p.occupationDays} jours d'occupation du sol"
                 tvGermination.text = "Germination : ${p.germinationDays} jours (${p.germinationTempMin}–${p.germinationTempMax}°C)"
                 tvSpacing.text = "Espacement : ${p.spacingCm} cm"
                 tvSunExposure.text = "Exposition : ${p.sunExposure}"
                 tvWaterNeeds.text = "Arrosage : ${p.waterNeeds}"
 
-                // Mois de semis
                 val months = p.sowingMonths.split(",").mapNotNull { it.trim().toIntOrNull() }
                 val monthNames = months.joinToString(" · ") { monthToName(it) }
                 tvSowingMonths.text = if (monthNames.isNotEmpty()) "Semis : $monthNames" else "Semis : non défini"
@@ -64,9 +58,7 @@ class PlantDetailBottomSheet : BottomSheetDialogFragment() {
 
                 btnSowNow.setOnClickListener {
                     dismiss()
-                    // Ouvrir directement le BottomSheet de semis avec cette plante pré-sélectionnée
-                    val sheet = AddSowingBottomSheet()
-                    sheet.show(parentFragmentManager, "AddSowing")
+                    AddSowingBottomSheet().show(parentFragmentManager, "AddSowing")
                 }
             }
         }
