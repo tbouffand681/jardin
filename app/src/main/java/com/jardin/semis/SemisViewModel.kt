@@ -10,6 +10,7 @@ import com.jardin.semis.data.db.SowingWithPlant
 import com.jardin.semis.data.model.*
 import com.jardin.semis.data.repository.SemisRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,10 +31,8 @@ class SemisApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Pré-remplissage des plantes par défaut
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
-            repository.populateDefaultPlants()
-        }
+        // Initialisation sécurisée via coroutine sur IO dispatcher
+        // sans GlobalScope pour éviter les crashes Android 14
     }
 }
 
@@ -43,14 +42,16 @@ class SemisViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = (application as SemisApplication).repository
 
+    init {
+        // Pré-remplissage des plantes au premier lancement, depuis le ViewModel
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.populateDefaultPlants()
+        }
+    }
+
     // Plantes
     val allPlants = repository.getAllPlants()
     val allCategories = repository.getAllCategories()
-
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-
-    private val _selectedCategory = MutableStateFlow<String?>(null)
 
     // Semis
     val allSowingsWithPlant = repository.getAllSowingsWithPlant()
@@ -140,21 +141,6 @@ class SemisViewModel(application: Application) : AndroidViewModel(application) {
             },
             onFailure = {
                 _weatherError.value = "Impossible de charger la météo. Vérifiez votre connexion."
-                _weatherLoading.value = false
-            }
-        )
-    }
-
-    fun fetchWeatherByLocation(lat: Double, lon: Double) = viewModelScope.launch {
-        _weatherLoading.value = true
-        _weatherError.value = null
-        repository.getWeatherByLocation(lat, lon).fold(
-            onSuccess = {
-                _weatherData.value = it
-                _weatherLoading.value = false
-            },
-            onFailure = {
-                _weatherError.value = "Localisation impossible. Entrez votre ville manuellement."
                 _weatherLoading.value = false
             }
         )
