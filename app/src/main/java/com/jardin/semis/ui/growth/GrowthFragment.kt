@@ -1,19 +1,12 @@
 package com.jardin.semis.ui.growth
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.location.Location
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
 import com.google.android.material.snackbar.Snackbar
 import com.jardin.semis.SemisViewModel
 import com.jardin.semis.data.model.SowingStatus
@@ -30,22 +23,6 @@ class GrowthFragment : Fragment() {
     private var _binding: FragmentGrowthBinding? = null
     private val binding get() = _binding!!
     private val viewModel: SemisViewModel by activityViewModels()
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
-
-    private val locationPermissionRequest = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        when {
-            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true -> {
-                fetchLocationWeather()
-            }
-            else -> {
-                Snackbar.make(binding.root, "Entrez votre ville manuellement", Snackbar.LENGTH_LONG).show()
-                binding.cityInputLayout.visibility = View.VISIBLE
-            }
-        }
-    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentGrowthBinding.inflate(inflater, container, false)
@@ -55,39 +32,14 @@ class GrowthFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
-
         setupWeather()
         observeWeather()
         observeGrowthTimeline()
-        requestLocationAndFetchWeather()
-    }
-
-    private fun requestLocationAndFetchWeather() {
-        when {
-            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED -> fetchLocationWeather()
-            else -> locationPermissionRequest.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-            )
-        }
-    }
-
-    private fun fetchLocationWeather() {
-        try {
-            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-                if (location != null) {
-                    viewModel.fetchWeatherByLocation(location.latitude, location.longitude)
-                } else {
-                    binding.cityInputLayout.visibility = View.VISIBLE
-                }
-            }
-        } catch (e: SecurityException) {
-            binding.cityInputLayout.visibility = View.VISIBLE
-        }
     }
 
     private fun setupWeather() {
+        binding.cityInputLayout.visibility = View.VISIBLE
+
         binding.btnFetchCityWeather.setOnClickListener {
             val city = binding.etCity.text.toString().trim()
             if (city.isNotEmpty()) {
@@ -97,14 +49,13 @@ class GrowthFragment : Fragment() {
         }
 
         binding.btnRefreshWeather.setOnClickListener {
-            requestLocationAndFetchWeather()
+            binding.cityInputLayout.visibility = View.VISIBLE
         }
     }
 
     private fun observeWeather() {
         viewModel.weatherData.observe(viewLifecycleOwner) { weather ->
             if (weather == null) return@observe
-
             with(binding) {
                 weatherCard.visibility = View.VISIBLE
                 tvCity.text = "📍 ${weather.cityName}"
@@ -114,9 +65,6 @@ class GrowthFragment : Fragment() {
                 tvWind.text = "💨 Vent : ${weather.windSpeed} m/s"
                 tvTempMinMax.text = "↓${weather.tempMin.toInt()}° / ↑${weather.tempMax.toInt()}°"
                 tvSowingAdvice.text = weather.sowingAdvice()
-
-                // Charger l'icône météo
-                val iconUrl = "https://openweathermap.org/img/wn/${weather.icon}@2x.png"
             }
         }
 
@@ -148,10 +96,8 @@ class GrowthFragment : Fragment() {
                 binding.emptyGrowth.visibility = View.GONE
                 binding.growthContainer.visibility = View.VISIBLE
 
-                // Trier par date de récolte
                 val sorted = sowings.sortedBy { it.expectedHarvestDate }
 
-                // Prochaines récoltes (30 jours)
                 val upcoming = sorted.filter {
                     val harvest = LocalDate.parse(it.expectedHarvestDate, dateFormatter)
                     val daysLeft = ChronoUnit.DAYS.between(today, harvest)
@@ -172,16 +118,10 @@ class GrowthFragment : Fragment() {
                     binding.tvUpcomingHarvests.visibility = View.GONE
                 }
 
-                // Stats globales
                 val germinated = sowings.count { it.status == SowingStatus.GERMINATED }
                 val growing = sowings.count { it.status == SowingStatus.GROWING }
                 val sowed = sowings.count { it.status == SowingStatus.SOWED }
-                binding.tvStatsGrowth.text = """
-                    🌰 Semés : $sowed
-                    🌱 Levée : $germinated
-                    🌿 En croissance : $growing
-                    Total actifs : ${sowings.size}
-                """.trimIndent()
+                binding.tvStatsGrowth.text = "🌰 Semés : $sowed\n🌱 Levée : $germinated\n🌿 En croissance : $growing\nTotal actifs : ${sowings.size}"
             }
         }
     }
