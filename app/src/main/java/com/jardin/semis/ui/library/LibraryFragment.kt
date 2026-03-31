@@ -6,7 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.chip.Chip
@@ -19,14 +19,18 @@ class LibraryFragment : Fragment() {
 
     private var _binding: FragmentLibraryBinding? = null
     private val binding get() = _binding!!
-    private val viewModel: SemisViewModel by activityViewModels()
+
+    private val viewModel: SemisViewModel by lazy {
+        ViewModelProvider(
+            requireActivity(),
+            ViewModelProvider.AndroidViewModelFactory.getInstance(requireActivity().application)
+        )[SemisViewModel::class.java]
+    }
+
     private lateinit var plantAdapter: PlantAdapter
     private var selectedCategory: String? = null
 
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentLibraryBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -34,17 +38,6 @@ class LibraryFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        setupRecyclerView()
-        setupSearch()
-        observeCategories()
-        observePlants()
-
-        binding.fabAddPlant.setOnClickListener {
-            AddEditPlantDialog().show(childFragmentManager, "AddPlant")
-        }
-    }
-
-    private fun setupRecyclerView() {
         plantAdapter = PlantAdapter(
             onPlantClick = { plant ->
                 PlantDetailBottomSheet.newInstance(plant.id)
@@ -55,21 +48,31 @@ class LibraryFragment : Fragment() {
                     .show(childFragmentManager, "EditPlant")
             }
         )
+
         binding.recyclerPlants.apply {
             layoutManager = GridLayoutManager(requireContext(), 2)
             adapter = plantAdapter
+        }
+
+        setupSearch()
+        observeCategories()
+        observePlants()
+
+        binding.fabAddPlant.setOnClickListener {
+            AddEditPlantDialog().show(childFragmentManager, "AddPlant")
         }
     }
 
     private fun setupSearch() {
         binding.searchBar.doOnTextChanged { text, _, _, _ ->
             val query = text?.toString() ?: ""
-            if (query.isEmpty()) {
-                observePlants()
-            } else {
-                lifecycleScope.launch {
+            lifecycleScope.launch {
+                if (query.isEmpty()) {
+                    observePlants()
+                } else {
                     viewModel.searchPlants(query).collectLatest {
                         plantAdapter.submitList(it)
+                        binding.tvPlantCount.text = "${it.size} plante${if (it.size > 1) "s" else ""}"
                     }
                 }
             }
@@ -81,7 +84,6 @@ class LibraryFragment : Fragment() {
             viewModel.allCategories.collectLatest { categories ->
                 binding.chipGroupCategories.removeAllViews()
 
-                // Chip "Tout"
                 val allChip = Chip(requireContext()).apply {
                     text = "Tout"
                     isCheckable = true
@@ -97,11 +99,13 @@ class LibraryFragment : Fragment() {
                     val chip = Chip(requireContext()).apply {
                         text = category
                         isCheckable = true
+                        isChecked = selectedCategory == category
                         setOnClickListener {
                             selectedCategory = category
                             lifecycleScope.launch {
                                 viewModel.getPlantsByCategory(category).collectLatest {
                                     plantAdapter.submitList(it)
+                                    binding.tvPlantCount.text = "${it.size} plante${if (it.size > 1) "s" else ""}"
                                 }
                             }
                         }
@@ -116,7 +120,7 @@ class LibraryFragment : Fragment() {
         lifecycleScope.launch {
             viewModel.allPlants.collectLatest { plants ->
                 plantAdapter.submitList(plants)
-                binding.tvPlantCount.text = "${plants.size} plantes"
+                binding.tvPlantCount.text = "${plants.size} plante${if (plants.size > 1) "s" else ""}"
             }
         }
     }

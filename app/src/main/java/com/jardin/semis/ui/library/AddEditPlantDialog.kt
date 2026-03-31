@@ -5,7 +5,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.jardin.semis.SemisApplication
 import com.jardin.semis.SemisViewModel
 import com.jardin.semis.data.model.Plant
 import com.jardin.semis.databinding.DialogAddEditPlantBinding
@@ -14,23 +16,25 @@ class AddEditPlantDialog : BottomSheetDialogFragment() {
 
     private var _binding: DialogAddEditPlantBinding? = null
     private val binding get() = _binding!!
-    private val viewModel: SemisViewModel by activityViewModels()
+
+    // ViewModel partagé avec l'activité — factory explicite pour Android 14
+    private val viewModel: SemisViewModel by lazy {
+        ViewModelProvider(
+            requireActivity(),
+            ViewModelProvider.AndroidViewModelFactory.getInstance(requireActivity().application)
+        )[SemisViewModel::class.java]
+    }
+
+    // Plante à modifier (null = création)
     private var existingPlant: Plant? = null
 
     companion object {
-        private const val ARG_PLANT_ID = "plant_id"
-
-        fun newInstance(plant: Plant): AddEditPlantDialog {
-            return AddEditPlantDialog().apply {
-                existingPlant = plant
-            }
+        fun newInstance(plant: Plant) = AddEditPlantDialog().apply {
+            existingPlant = plant
         }
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = DialogAddEditPlantBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -50,34 +54,42 @@ class AddEditPlantDialog : BottomSheetDialogFragment() {
             binding.etGerminationDays.setText(plant.germinationDays.toString())
             binding.etNotes.setText(plant.notes)
         } ?: run {
-            binding.tvDialogTitle.text = "Nouvelle plante"
+            binding.tvDialogTitle.text = "🌱 Nouvelle plante"
         }
 
         binding.btnSave.setOnClickListener {
-            val name = binding.etName.text.toString().trim()
+            val name = binding.etName.text?.toString()?.trim() ?: ""
             if (name.isEmpty()) {
-                binding.tilName.error = "Nom requis"
+                binding.tilName.error = "Le nom est requis"
                 return@setOnClickListener
             }
+            binding.tilName.error = null
 
-            val plant = (existingPlant ?: Plant(name = name)).copy(
+            val basePlant = existingPlant ?: Plant(name = name)
+            val plant = basePlant.copy(
                 name = name,
-                latinName = binding.etLatinName.text.toString().trim(),
-                emoji = binding.etEmoji.text.toString().trim().ifEmpty { "🌱" },
-                category = binding.etCategory.text.toString().trim().ifEmpty { "Légume" },
-                sowingMonths = binding.etSowingMonths.text.toString().trim(),
-                occupationDays = binding.etOccupationDays.text.toString().toIntOrNull() ?: 90,
-                spacingCm = binding.etSpacingCm.text.toString().toIntOrNull() ?: 30,
-                germinationDays = binding.etGerminationDays.text.toString().toIntOrNull() ?: 10,
-                notes = binding.etNotes.text.toString().trim()
+                latinName = binding.etLatinName.text?.toString()?.trim() ?: "",
+                emoji = binding.etEmoji.text?.toString()?.trim()?.ifEmpty { "🌱" } ?: "🌱",
+                category = binding.etCategory.text?.toString()?.trim()?.ifEmpty { "Légume" } ?: "Légume",
+                sowingMonths = binding.etSowingMonths.text?.toString()?.trim() ?: "",
+                occupationDays = binding.etOccupationDays.text?.toString()?.toIntOrNull() ?: 90,
+                spacingCm = binding.etSpacingCm.text?.toString()?.toIntOrNull() ?: 30,
+                germinationDays = binding.etGerminationDays.text?.toString()?.toIntOrNull() ?: 10,
+                notes = binding.etNotes.text?.toString()?.trim() ?: "",
+                isDefault = existingPlant?.isDefault ?: false
             )
 
-            if (existingPlant != null) {
-                viewModel.updatePlant(plant)
-            } else {
-                viewModel.addPlant(plant)
+            try {
+                if (existingPlant != null) {
+                    viewModel.updatePlant(plant)
+                } else {
+                    viewModel.addPlant(plant)
+                }
+                dismiss()
+            } catch (e: Exception) {
+                // Afficher l'erreur sans crasher
+                binding.tilName.error = "Erreur : ${e.message}"
             }
-            dismiss()
         }
 
         binding.btnCancel.setOnClickListener { dismiss() }
