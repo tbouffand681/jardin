@@ -80,6 +80,9 @@ interface SowingDao {
     @Delete
     suspend fun deleteSowing(sowing: Sowing)
 
+    @Query("DELETE FROM sowings WHERE id = :id")
+    suspend fun deleteSowingById(id: Long)
+
     @Query("UPDATE sowings SET status = :status WHERE id = :id")
     suspend fun updateSowingStatus(id: Long, status: SowingStatus)
 }
