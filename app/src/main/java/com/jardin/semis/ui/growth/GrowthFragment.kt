@@ -83,10 +83,15 @@ class GrowthFragment : Fragment() {
                 tvHumidity.text = "💧 ${weather.humidity}%"
                 tvWind.text = "💨 ${String.format("%.0f", weather.windSpeed)} km/h"
                 tvTempMinMax.text = "↓${weather.tempMin.toInt()}° ↑${weather.tempMax.toInt()}°"
-                tvPrecipitation.text = "🌧️ ${String.format("%.1f", weather.precipitation)} mm"
-                tvEt0.text = "🌱 ET₀ ${String.format("%.1f", weather.evapotranspiration)} mm/j"
+                tvPrecipitation.text = "🌧️ ${String.format("%.1f", weather.precipitation)} L/m²"
+                tvEt0.text = "🌱 ET₀ ${String.format("%.1f", weather.evapotranspiration)} L/m²/j"
                 tvSowingAdvice.text = weather.sowingAdvice()
                 tvIrrigationAdvice.text = weather.irrigationAdvice()
+                // Cumuls ET₀
+                cardEt0Cumul.visibility = View.VISIBLE
+                tvEt0Today.text = "${String.format("%.1f", weather.evapotranspiration)} L/m²"
+                tvEt02days.text = "${String.format("%.1f", weather.et0Cumul2days)} L/m²"
+                tvEt05days.text = "${String.format("%.1f", weather.et0Cumul5days)} L/m²"
             }
         }
 
