@@ -71,66 +71,102 @@ class ExportFragment : Fragment() {
     }
 
     private fun importFromJson(uri: Uri) {
-        lifecycleScope.launch {
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            var plantsImported = 0
+            var eventsImported = 0
+            var errorMsg: String? = null
+
             try {
+                // Prendre la permission persistante sur l'URI
+                try {
+                    requireContext().contentResolver.takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: Exception) { /* Pas toujours disponible, on continue */ }
+
+                // Lire le contenu du fichier
                 val content = requireContext().contentResolver.openInputStream(uri)
-                    ?.bufferedReader()?.readText() ?: return@launch
+                    ?.use { it.bufferedReader(Charsets.UTF_8).readText() }
+                    ?: throw Exception("Impossible de lire le fichier")
+
+                if (content.isBlank()) throw Exception("Le fichier est vide")
+
                 val json = JSONObject(content)
                 val repo = (requireActivity().application as SemisApplication).repository
 
-                // Importer les plantes
-                var plantsImported = 0
-                json.optJSONArray("plantes")?.let { arr ->
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        val plant = Plant(
-                            name = obj.optString("nom", ""),
-                            latinName = obj.optString("nomLatin", ""),
-                            category = obj.optString("categorie", "Légume"),
-                            emoji = obj.optString("emoji", "🌱"),
-                            sowingMonths = obj.optString("moisSemis", ""),
-                            occupationDays = obj.optInt("occupation", 90),
-                            spacingCm = obj.optInt("espacement", 30),
-                            sunExposure = obj.optString("exposition", "Plein soleil"),
-                            waterNeeds = obj.optString("eau", "Moyen"),
-                            germinationDays = obj.optInt("germination", 10),
-                            notes = obj.optString("notes", ""),
-                            isDefault = false
-                        )
-                        if (plant.name.isNotEmpty()) { repo.insertPlant(plant); plantsImported++ }
+                // ── Plantes ──────────────────────────────────────────────
+                val plantsArr = json.optJSONArray("plantes")
+                if (plantsArr != null) {
+                    for (i in 0 until plantsArr.length()) {
+                        try {
+                            val obj = plantsArr.getJSONObject(i)
+                            val name = obj.optString("nom", "").trim()
+                            if (name.isEmpty()) continue
+                            val plant = Plant(
+                                name = name,
+                                latinName = obj.optString("nomLatin", ""),
+                                category = obj.optString("categorie", "Légume"),
+                                emoji = obj.optString("emoji", "🌱"),
+                                sowingMonths = obj.optString("moisSemis", ""),
+                                occupationDays = obj.optInt("occupation", 90),
+                                spacingCm = obj.optInt("espacement", 30),
+                                sunExposure = obj.optString("exposition", "Plein soleil"),
+                                waterNeeds = obj.optString("eau", "Moyen"),
+                                germinationDays = obj.optInt("germination", 10),
+                                notes = obj.optString("notes", ""),
+                                isDefault = false
+                            )
+                            repo.insertPlant(plant)
+                            plantsImported++
+                        } catch (e: Exception) { /* Ignorer les entrées malformées */ }
                     }
                 }
 
-                // Importer les observations
-                var eventsImported = 0
-                json.optJSONArray("observations")?.let { arr ->
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        val event = NaturalEvent(
-                            eventDate = obj.optString("date", LocalDate.now().toString()),
-                            title = obj.optString("titre", ""),
-                            category = obj.optString("categorie", "Autre"),
-                            emoji = obj.optString("emoji", "📝"),
-                            description = obj.optString("description", ""),
-                            location = obj.optString("lieu", "")
-                        )
-                        if (event.title.isNotEmpty()) { repo.addNaturalEvent(event); eventsImported++ }
+                // ── Observations ─────────────────────────────────────────
+                val obsArr = json.optJSONArray("observations")
+                if (obsArr != null) {
+                    for (i in 0 until obsArr.length()) {
+                        try {
+                            val obj = obsArr.getJSONObject(i)
+                            val title = obj.optString("titre", "").trim()
+                            if (title.isEmpty()) continue
+                            val event = NaturalEvent(
+                                eventDate = obj.optString("date", LocalDate.now().toString()),
+                                title = title,
+                                category = obj.optString("categorie", "Autre"),
+                                emoji = obj.optString("emoji", "📝"),
+                                description = obj.optString("description", ""),
+                                location = obj.optString("lieu", "")
+                            )
+                            repo.addNaturalEvent(event)
+                            eventsImported++
+                        } catch (e: Exception) { /* Ignorer les entrées malformées */ }
                     }
                 }
 
-                val msg = buildString {
-                    append("✅ Import réussi !")
-                    if (plantsImported > 0) append(" $plantsImported plante(s)")
-                    if (eventsImported > 0) append(", $eventsImported observation(s)")
-                    if (plantsImported == 0 && eventsImported == 0) append(" — Aucune donnée importée (vérifiez le fichier)")
-                }
-                if (_binding != null) {
-                    com.google.android.material.snackbar.Snackbar
-                        .make(binding.root, msg, com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
-                        .show()
-                }
             } catch (e: Exception) {
-                showMessage("❌ Erreur d'import : ${e.message}")
+                errorMsg = e.message ?: "Erreur inconnue"
+            }
+
+            // Retour sur le thread principal pour afficher le résultat
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (_binding == null) return@withContext
+                val msg = if (errorMsg != null) {
+                    "❌ Erreur : $errorMsg"
+                } else {
+                    buildString {
+                        if (plantsImported == 0 && eventsImported == 0) {
+                            append("⚠️ Aucune donnée importée — vérifiez que le fichier est bien une sauvegarde Almanach")
+                        } else {
+                            append("✅ Import réussi !")
+                            if (plantsImported > 0) append("  $plantsImported plante(s) ajoutée(s)")
+                            if (eventsImported > 0) append("  $eventsImported observation(s) ajoutée(s)")
+                        }
+                    }
+                }
+                com.google.android.material.snackbar.Snackbar
+                    .make(binding.root, msg, com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+                    .show()
             }
         }
     }
